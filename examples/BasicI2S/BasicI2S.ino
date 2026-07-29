@@ -34,7 +34,7 @@ void setup() {
   if (!tts.speakPinyin("da4 jia1 hao3", i2s)) {
     Serial.printf("Pinyin TTS failed: %s\n", tts.lastErrorMessage());
   }
-  if (!tts.speakMoney(72, 1, 0, ESP32TTSPayMode::Alipay, i2s)) {
+  if (!tts.speakMoney(72, 1, 0, ESP32TTSPayMode::NumberOnly, i2s)) {
     Serial.printf("Money TTS failed: %s\n", tts.lastErrorMessage());
   }
 }

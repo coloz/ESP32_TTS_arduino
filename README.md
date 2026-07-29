@@ -21,6 +21,10 @@ from 0 to 5, and cancellation from another task.
   accepts PCM samples.
 - UTF-8 source files when passing Chinese text literals.
 
+The `BasicI2S_ES8311` example additionally uses the standalone
+`esp32_es8311` sibling library. That library controls the codec while TTS PCM
+continues to flow through Arduino `I2SClass`.
+
 Arduino-ESP32 3.3.x already provides `esp_tts_chinese`, `voice_set_xiaole`,
 and their headers, so this library does not duplicate those precompiled
 components. Following Espressif's recommended layout, the voice set is stored

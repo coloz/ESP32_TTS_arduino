@@ -14,6 +14,9 @@ PCM。库支持直接写入 Arduino `Stream`（包括 `I2SClass`）、PCM 回调
 - I2S DAC/功放（例如 MAX98357A）或能接收 PCM 的自定义音频输出。
 - 当前 ESP-SR 设备端合成只支持中文。
 
+使用 `BasicI2S_ES8311` 示例时，另行安装同级目录中的 `esp32_es8311` 库。该库只
+管理 ES8311 控制面，TTS PCM 仍通过 Arduino `I2SClass` 输出。
+
 Arduino-ESP32 3.3.x 已包含 `esp_tts_chinese`、`voice_set_xiaole` 以及对应头文件，
 本库不会重复打包这些预编译库。音色数据使用官方推荐的独立 `voice_data` 分区，
 避免占用应用分区。

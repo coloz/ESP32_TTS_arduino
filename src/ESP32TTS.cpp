@@ -288,7 +288,81 @@ bool ESP32TTS::speak(const char *utf8Text, Stream &output) {
 
 bool ESP32TTS::speakPinyin(const char *pinyin, AudioOutput output,
                            void *userData) {
-  return speakText(pinyin, true, output, userData);
+  if (pinyin == nullptr || pinyin[0] == '\0') {
+    setError(ESP32TTSError::InvalidArgument);
+    return false;
+  }
+  if (!beginOperation(output)) {
+    return false;
+  }
+
+#if ESP32_TTS_ENGINE_AVAILABLE
+  const char *cursor = pinyin;
+  bool hasSyllable = false;
+  while (*cursor != '\0') {
+    while (*cursor == ' ' || *cursor == '\t' || *cursor == '\r' ||
+           *cursor == '\n') {
+      ++cursor;
+    }
+    if (*cursor == '\0') {
+      break;
+    }
+
+    // The binary ESP-SR parser in some Arduino-ESP32 releases treats a
+    // whitespace-separated phrase as one dictionary item and asserts when it
+    // cannot find that item. Feed it one documented tone-number syllable at a
+    // time instead. "zhuang4" and "chuang2" are the longest standard forms.
+    char syllable[8];
+    size_t length = 0;
+    while (*cursor != '\0' && *cursor != ' ' && *cursor != '\t' &&
+           *cursor != '\r' && *cursor != '\n') {
+      if (length + 1 >= sizeof(syllable) ||
+          !((*cursor >= 'a' && *cursor <= 'z') ||
+            (*cursor >= '0' && *cursor <= '5'))) {
+        esp_tts_stream_reset(_impl->handle);
+        setError(ESP32TTSError::InvalidArgument);
+        finishOperation();
+        return false;
+      }
+      syllable[length++] = *cursor++;
+    }
+    if (length < 2 || syllable[length - 1] < '0' ||
+        syllable[length - 1] > '5') {
+      esp_tts_stream_reset(_impl->handle);
+      setError(ESP32TTSError::InvalidArgument);
+      finishOperation();
+      return false;
+    }
+    syllable[length] = '\0';
+
+    if (!esp_tts_parse_pinyin(_impl->handle, syllable)) {
+      esp_tts_stream_reset(_impl->handle);
+      setError(ESP32TTSError::ParseFailed);
+      finishOperation();
+      return false;
+    }
+    hasSyllable = true;
+    const bool result = outputParsed(output, userData);
+    esp_tts_stream_reset(_impl->handle);
+    if (!result) {
+      finishOperation();
+      return false;
+    }
+  }
+
+  if (!hasSyllable) {
+    setError(ESP32TTSError::InvalidArgument);
+    finishOperation();
+    return false;
+  }
+  setError(ESP32TTSError::None);
+  finishOperation();
+  return true;
+#else
+  (void)userData;
+  finishOperation();
+  return false;
+#endif
 }
 
 bool ESP32TTS::speakPinyin(const char *pinyin, Stream &output) {
