@@ -26,9 +26,12 @@ constexpr uint8_t ESP32TTS::bitsPerSample;
 constexpr uint8_t ESP32TTS::channels;
 constexpr uint8_t ESP32TTS::minSpeed;
 constexpr uint8_t ESP32TTS::maxSpeed;
-constexpr size_t ESP32TTS::bundledVoiceDataSize;
-const char ESP32TTS::bundledVoiceDataSha256[] =
+constexpr size_t ESP32TTS::smallVoiceDataSize;
+constexpr size_t ESP32TTS::standardVoiceDataSize;
+const char ESP32TTS::smallVoiceDataSha256[] =
     "cc9a81fd716b3c07fae3ca2f802dc026081896f2e34db9b9db117d4de5a85c01";
+const char ESP32TTS::standardVoiceDataSha256[] =
+    "b0b9ad9fdaa4a560ee839ce6a4659f08af3fded7c72d0784d83186859a081e55";
 
 namespace {
 
@@ -107,7 +110,18 @@ ESP32TTS::~ESP32TTS() {
 }
 
 bool ESP32TTS::begin(const char *partitionLabel) {
-  return begin(partitionLabel, bundledVoiceDataSize, bundledVoiceDataSha256);
+  if (begin(partitionLabel, smallVoiceDataSize, smallVoiceDataSha256)) {
+    return true;
+  }
+
+  // Retry only when valid-looking data did not match the small model. Other
+  // errors (missing partition, empty flash, unsupported target, etc.) cannot
+  // be fixed by trying another known model.
+  if (lastError() != ESP32TTSError::VoiceDataInvalid) {
+    return false;
+  }
+  return begin(partitionLabel, standardVoiceDataSize,
+               standardVoiceDataSha256);
 }
 
 bool ESP32TTS::begin(const char *partitionLabel, size_t voiceDataSize,

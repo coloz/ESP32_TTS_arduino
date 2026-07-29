@@ -38,8 +38,10 @@ public:
   static constexpr uint8_t channels = 1;
   static constexpr uint8_t minSpeed = 0;
   static constexpr uint8_t maxSpeed = 5;
-  static constexpr size_t bundledVoiceDataSize = 2913777;
-  static const char bundledVoiceDataSha256[];
+  static constexpr size_t smallVoiceDataSize = 2913777;
+  static const char smallVoiceDataSha256[];
+  static constexpr size_t standardVoiceDataSize = 3821311;
+  static const char standardVoiceDataSha256[];
 
   ESP32TTS();
   ~ESP32TTS();
@@ -47,7 +49,7 @@ public:
   ESP32TTS(const ESP32TTS &) = delete;
   ESP32TTS &operator=(const ESP32TTS &) = delete;
 
-  // Maps and verifies the bundled voice data, then creates a TTS instance.
+  // Detects and verifies either bundled voice model, then creates a TTS instance.
   bool begin(const char *partitionLabel = "voice_data");
 
   // Custom voice data must be protected by its exact byte length and SHA-256.

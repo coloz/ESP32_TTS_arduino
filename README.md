@@ -72,6 +72,20 @@ in a separate `voice_data` partition instead of consuming application space.
 
    The tool prints the matching `tts.begin()` validation arguments.
 
+   The default is the 2.78 MiB small model. To use the 3.64 MiB full Xiaoxin
+   model, copy `extras/partitions/tts_8mb_standard.csv` to the sketch as
+   `partitions.csv`, upload the sketch so that layout takes effect, then run:
+
+   ```powershell
+   py tools/flash_voice.py --port COM5 --voice standard
+   ```
+
+   Continue to initialize with `tts.begin()`; the library automatically
+   identifies the small or full Xiaoxin model by its length and SHA-256. The
+   full model's 8 MB layout allocates 3 MB to the application, 3.6875 MB to
+   voice data, and 1.25 MB to SPIFFS. It does not fit the default 3 MB
+   `voice_data` partition.
+
 Normal Arduino uploads do not overwrite `voice_data`. If **Erase All Flash**
 is enabled, flash the voice data again afterward.
 
@@ -117,8 +131,8 @@ not destroy an `ESP32TTS` object from inside its PCM callback.
 
 ## API overview
 
-- `begin("voice_data")`: verify the bundled voice file's exact length and
-  SHA-256, map the partition, and create the synthesizer.
+- `begin("voice_data")`: identify either bundled voice model by its exact
+  length and SHA-256, map the partition, and create the synthesizer.
 - `begin(label, size, sha256)`: validate a custom voice file using its exact
   length and SHA-256.
 - `speak(text, stream/callback)`: synthesize UTF-8 Chinese text.

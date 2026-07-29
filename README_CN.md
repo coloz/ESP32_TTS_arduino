@@ -55,6 +55,18 @@ Arduino-ESP32 3.3.x 已包含 `esp_tts_chinese`、`voice_set_xiaole` 以及对�
 
    脚本会输出与该文件匹配的 `tts.begin()` 调用参数。
 
+   默认烧录约 2.78 MiB 的小模型。若要使用约 3.64 MiB 的完整“小欣”模型，先把
+   `extras/partitions/tts_8mb_standard.csv` 复制为草图目录中的
+   `partitions.csv` 并重新上传草图，然后执行：
+
+   ```powershell
+   py tools/flash_voice.py --port COM5 --voice standard
+   ```
+
+   程序仍然调用 `tts.begin()`；库会根据分区内容的长度和 SHA-256 自动识别 small
+   或完整“小欣”模型。完整模型使用的 8 MB 分区表提供 3 MB 应用、3.6875 MB
+   声音数据和 1.25 MB SPIFFS，不能与默认的 3 MB `voice_data` 分区混用。
+
 之后普通的 Arduino“上传”不会覆盖 `voice_data`；如果选择了“Erase All Flash”，
 需要重新执行第 4 步。
 
@@ -91,7 +103,8 @@ void loop() {}
 
 ## API 摘要
 
-- `begin("voice_data")`：校验随库声音文件的长度与 SHA-256，映射分区并创建合成器。
+- `begin("voice_data")`：根据长度和 SHA-256 自动识别 small 或完整“小欣”声音文件，
+  映射分区并创建合成器。
 - `begin(label, size, sha256)`：使用显式长度和 SHA-256 校验自定义声音文件。
 - `speak(text, stream/callback)`：合成 UTF-8 中文。
 - `speakPinyin("da4 jia1 hao3", ...)`：直接合成带声调数字的拼音。

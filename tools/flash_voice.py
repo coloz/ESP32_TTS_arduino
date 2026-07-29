@@ -14,10 +14,22 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_MODEL = ROOT / "extras" / "voice_data" / "esp_tts_voice_data_xiaoxin_small.dat"
 DEFAULT_PARTITIONS = ROOT / "extras" / "partitions" / "tts_8mb.csv"
-DEFAULT_MODEL_SIZE = 2913777
-DEFAULT_MODEL_SHA256 = "cc9a81fd716b3c07fae3ca2f802dc026081896f2e34db9b9db117d4de5a85c01"
+STANDARD_PARTITIONS = ROOT / "extras" / "partitions" / "tts_8mb_standard.csv"
+BUNDLED_MODELS = {
+    "small": (
+        ROOT / "extras" / "voice_data" / "esp_tts_voice_data_xiaoxin_small.dat",
+        2913777,
+        "cc9a81fd716b3c07fae3ca2f802dc026081896f2e34db9b9db117d4de5a85c01",
+        DEFAULT_PARTITIONS,
+    ),
+    "standard": (
+        ROOT / "extras" / "voice_data" / "esp_tts_voice_data_xiaoxin.dat",
+        3821311,
+        "b0b9ad9fdaa4a560ee839ce6a4659f08af3fded7c72d0784d83186859a081e55",
+        STANDARD_PARTITIONS,
+    ),
+}
 
 
 def parse_size(value: str) -> int:
@@ -76,20 +88,27 @@ def main() -> int:
     )
     parser.add_argument("--port", required=True, help="Serial port, for example COM5 or /dev/ttyUSB0")
     parser.add_argument("--baud", type=int, default=921600)
-    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    model_group = parser.add_mutually_exclusive_group()
+    model_group.add_argument(
+        "--voice", choices=BUNDLED_MODELS, default="small",
+        help="Bundled voice set (default: small)",
+    )
+    model_group.add_argument("--model", type=Path, help="Custom voice data file")
     parser.add_argument(
         "--sha256",
         dest="expected_sha256",
         help="Expected SHA-256 (required for a custom --model)",
     )
-    parser.add_argument("--partitions", type=Path, default=DEFAULT_PARTITIONS)
+    parser.add_argument("--partitions", type=Path)
     parser.add_argument("--partition", default="voice_data")
     parser.add_argument("--offset", type=lambda value: int(value, 0), help="Override CSV offset")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    model = args.model.resolve()
-    partitions = args.partitions.resolve()
+    bundled = None if args.model is not None else BUNDLED_MODELS[args.voice]
+    model = (args.model if args.model is not None else bundled[0]).resolve()
+    default_partitions = DEFAULT_PARTITIONS if bundled is None else bundled[3]
+    partitions = (args.partitions or default_partitions).resolve()
     if not model.is_file():
         parser.error(f"model file does not exist: {model}")
     if args.offset is None and not partitions.is_file():
@@ -104,10 +123,10 @@ def main() -> int:
         parser.error(str(error))
 
     model_size = model.stat().st_size
-    using_bundled_model = model == DEFAULT_MODEL.resolve()
-    if using_bundled_model and model_size != DEFAULT_MODEL_SIZE:
+    using_bundled_model = bundled is not None
+    if using_bundled_model and model_size != bundled[1]:
         parser.error(
-            f"bundled model size mismatch: expected {DEFAULT_MODEL_SIZE}, got {model_size}"
+            f"bundled model size mismatch: expected {bundled[1]}, got {model_size}"
         )
     if partition_size is not None and model_size > partition_size:
         parser.error(
@@ -116,7 +135,7 @@ def main() -> int:
 
     digest = sha256(model)
     if using_bundled_model:
-        expected_digest = DEFAULT_MODEL_SHA256
+        expected_digest = bundled[2]
         if (
             args.expected_sha256 is not None
             and args.expected_sha256.lower() != expected_digest
@@ -156,10 +175,13 @@ def main() -> int:
 
     print(f"Model: {model} ({model_size} bytes, sha256={digest})")
     print(f"Target: {args.partition} at {offset:#x}")
-    print(
-        "Runtime validation: "
-        f'tts.begin("{args.partition}", {model_size}, "{digest}")'
-    )
+    if using_bundled_model:
+        print(f'Runtime initialization: tts.begin("{args.partition}")')
+    else:
+        print(
+            "Runtime validation: "
+            f'tts.begin("{args.partition}", {model_size}, "{digest}")'
+        )
     print("Command:", subprocess.list2cmdline(command))
     if args.dry_run:
         return 0
