@@ -1,8 +1,11 @@
 #include <Arduino.h>
 #include <ESP_I2S.h>
+// Uncomment to embed the standard model instead of the default small model.
+// #define ESP32_TTS_USE_STANDARD_VOICE 1
 #include <ESP32TTS.h>
 
-// Board settings: Flash Size = 8MB, Partition Scheme = Default 8MB.
+// Board setting: Flash Size = 8MB. This example's partitions.csv reserves
+// enough application space for either embedded voice model.
 // Change these pins to match your I2S DAC/amplifier (for example MAX98357A).
 static constexpr int I2S_BCLK = 5;
 static constexpr int I2S_LRCLK = 6;

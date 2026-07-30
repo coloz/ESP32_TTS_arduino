@@ -1,74 +1,49 @@
 # ESP32 TTS Arduino 库
 
-[English](README_EN.md) | 简体中文
+[English](README.md) | 简体中文
 
-这是一个面向 ESP32-S3 的离线中文 TTS Arduino 封装。底层使用 Arduino-ESP32
-随附的乐鑫 ESP-SR TTS 引擎，输入 UTF-8 中文，流式输出 16 kHz、16-bit、单声道
-PCM。库支持直接写入 Arduino `Stream`（包括 `I2SClass`）、PCM 回调、拼音输入、
-金额播报、0～5 档语速和跨任务停止。
+这是一个面向 ESP32-S3 的离线中文 TTS Arduino 封装。底层使用
+Arduino-ESP32 附带的乐鑫 ESP-SR TTS 引擎，输入 UTF-8 中文，流式输出
+16 kHz、16-bit、单声道 PCM。支持 Arduino `Stream`（包括 `I2SClass`）、
+PCM 回调、拼音输入、金额播报、0～5 档语速和跨任务停止。
+
+声音模型直接编译进应用固件，不再需要创建 `voice_data` 分区或单独上传
+`.dat` 文件。默认使用约 2.78 MiB 的 small 模型；通过宏可改用约 3.64 MiB
+的标准版。链接器只会把选中的一个模型加入最终固件。
 
 ## 环境要求
 
 - ESP32-S3，Flash 至少 8 MB。
-- Arduino-ESP32 3.3.8 或更新的 3.x 版本（已在 3.3.8 和 3.3.11-cn 上完整编译验证）。
-- I2S DAC/功放（例如 MAX98357A）或能接收 PCM 的自定义音频输出。
-- 当前 ESP-SR 设备端合成只支持中文。
-
-使用 `BasicI2S_ES8311` 示例时，另行安装同级目录中的 `esp32_es8311` 库。该库只
-管理 ES8311 控制面，TTS PCM 仍通过 Arduino `I2SClass` 输出。
-
-Arduino-ESP32 3.3.x 已包含 `esp_tts_chinese`、`voice_set_xiaole` 以及对应头文件，
-本库不会重复打包这些预编译库。音色数据使用官方推荐的独立 `voice_data` 分区，
-避免占用应用分区。
+- Arduino-ESP32 3.3.8 或更新的 3.x 版本。
+- I2S DAC/功放（例如 MAX98357A），或能接收 PCM 的自定义输出。
+- 使用 `BasicI2S_ES8311` 示例时，另行安装同级目录中的 `esp32_es8311` 库。
 
 ## 首次使用
 
-1. 在 Arduino IDE 中安装本库，选择 ESP32-S3 开发板，把 **Flash Size** 设为
-   8 MB 或更大，并把 **Partition Scheme** 设为 **Default 8MB**。
-2. 打开 `File > Examples > ESP32TTS > BasicI2S`，按硬件修改 BCLK、LRCLK 和
-   DOUT 引脚。示例目录中的 `partitions.csv` 会被 Arduino 构建系统自动采用。
-3. 正常上传一次示例，使自定义分区表生效。
-4. 只在首次使用、完全擦除 Flash 或更换声音集后，烧录一次声音数据：
+1. 安装本库并选择 ESP32-S3 开发板，把 **Flash Size** 设为 8 MB 或更大。
+2. 打开 `File > Examples > ESP32TTS > BasicI2S`，按硬件修改 BCLK、LRCLK
+   和 DOUT 引脚。
+3. 正常编译并上传草图。示例自带的 `partitions.csv` 会为内嵌模型预留足够的
+   应用空间，不再需要运行声音数据烧录脚本。
 
-   ```powershell
-   py -m pip install esptool
-   py tools/flash_voice.py --port COM5
-   ```
+## 选择声音模型
 
-   Linux/macOS 示例：
+默认无需任何配置，small 模型会编译进固件：
 
-   ```bash
-   python3 -m pip install esptool
-   python3 tools/flash_voice.py --port /dev/ttyUSB0
-   ```
+```cpp
+#include <ESP32TTS.h>
+```
 
-   如果库由 Arduino IDE 安装，`tools` 位于该库的安装目录。仓库中的默认分区把
-   `voice_data` 放在 `0x410000`，容量为 3 MB。脚本会读取 CSV、检查容量和官方
-   文件的 SHA-256 后再调用 esptool。
+若要使用标准版，必须在包含头文件之前定义宏：
 
-   使用自定义声音文件时必须显式提供预期摘要，防止损坏或误选的文件被烧录：
+```cpp
+#define ESP32_TTS_USE_STANDARD_VOICE 1
+#include <ESP32TTS.h>
+```
 
-   ```bash
-   python3 tools/flash_voice.py --port /dev/ttyUSB0 \
-     --model path/to/voice.dat --sha256 <64位SHA-256>
-   ```
-
-   脚本会输出与该文件匹配的 `tts.begin()` 调用参数。
-
-   默认烧录约 2.78 MiB 的小模型。若要使用约 3.64 MiB 的完整“小欣”模型，先把
-   `extras/partitions/tts_8mb_standard.csv` 复制为草图目录中的
-   `partitions.csv` 并重新上传草图，然后执行：
-
-   ```powershell
-   py tools/flash_voice.py --port COM5 --voice standard
-   ```
-
-   程序仍然调用 `tts.begin()`；库会根据分区内容的长度和 SHA-256 自动识别 small
-   或完整“小欣”模型。完整模型使用的 8 MB 分区表提供 3 MB 应用、3.6875 MB
-   声音数据和 1.25 MB SPIFFS，不能与默认的 3 MB `voice_data` 分区混用。
-
-之后普通的 Arduino“上传”不会覆盖 `voice_data`；如果选择了“Erase All Flash”，
-需要重新执行第 4 步。
+也可以通过构建系统为草图定义
+`ESP32_TTS_USE_STANDARD_VOICE=1`。宏只接受 `0` 或 `1`。两个模型分别位于
+静态归档的不同成员中，因此即使归档包含两份数据，最终固件也只链接所选版本。
 
 ## 最小示例
 
@@ -80,10 +55,13 @@ I2SClass i2s;
 ESP32TTS tts;
 
 void setup() {
+  Serial.begin(115200);
   i2s.setPins(5, 6, 7); // BCLK, LRCLK, DOUT
-  i2s.begin(I2S_MODE_STD, ESP32TTS::sampleRate,
-            I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO,
-            I2S_STD_SLOT_LEFT);
+  if (!i2s.begin(I2S_MODE_STD, ESP32TTS::sampleRate,
+                 I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO,
+                 I2S_STD_SLOT_LEFT)) {
+    return;
+  }
 
   if (!tts.begin()) {
     Serial.println(tts.lastErrorMessage());
@@ -98,54 +76,53 @@ void loop() {}
 ```
 
 `speak()` 是阻塞调用。需要中止时，可从另一个 FreeRTOS 任务调用 `stop()`。
-停止会在当前 PCM 输出回调返回后生效，因此回调不应无限阻塞。析构函数会请求停止并
-等待活动合成退出；不要在 PCM 回调内部销毁 `ESP32TTS` 对象。
+不要在 PCM 回调内部销毁 `ESP32TTS` 对象。
 
 ## API 摘要
 
-- `begin("voice_data")`：根据长度和 SHA-256 自动识别 small 或完整“小欣”声音文件，
-  映射分区并创建合成器。
-- `begin(label, size, sha256)`：使用显式长度和 SHA-256 校验自定义声音文件。
+- `begin()`：使用编译进固件的 small 或标准声音模型创建合成器。
 - `speak(text, stream/callback)`：合成 UTF-8 中文。
-- `speakPinyin("da4 jia1 hao3", ...)`：直接合成带声调数字的拼音。
-- `speakMoney(yuan, jiao, fen, mode, ...)`：合成金额，可选择纯数字、支付宝或微信前缀。
+- `speakPinyin("da4 jia1 hao3", ...)`：合成带声调数字的拼音。
+- `speakMoney(yuan, jiao, fen, mode, ...)`：合成金额播报。
 - `setSpeed(0..5)`：0 最慢，5 最快，默认 3。
+- `stop()`：请求停止当前的阻塞合成。
 - `lastError()` / `lastErrorMessage()`：获取最近错误。
-- `end()`：释放 TTS、声音集和 Flash 映射；正在合成时返回 `false`/`Busy`。
+- `end()`：释放 TTS 和声音集；正在合成时返回 `false`/`Busy`。
 
-回调签名如下。返回已消费的采样数；返回 0 会终止合成并报告 `OutputFailed`。
+为兼容旧项目，`begin(partitionLabel)` 和
+`begin(partitionLabel, size, sha256)` 仍可从外部分区加载声音数据。新项目通常只需
+调用无参数的 `begin()`。
+
+PCM 回调返回已消费的采样数；返回 0 会终止合成并报告 `OutputFailed`：
 
 ```cpp
 size_t output(const int16_t *samples, size_t sampleCount, void *userData);
 ```
 
-## 分区说明
+## Flash 与分区
 
-示例分区表面向 8 MB 或更大 Flash：4 MB 应用、3 MB 声音数据和 960 KB SPIFFS。
-示例目录的 CSV 决定实际分区，但 Arduino 的程序容量检查仍来自开发板菜单。在
-Arduino-ESP32 3.3.11-cn 中，请选择 **Default 8MB**；只设置 Flash Size 会继续使用
-1,310,720 字节的默认程序上限，而 **Custom** 菜单值会给出过大的 16 MB 上限。
-Arduino CLI 对应参数为：
+内嵌 small 模型的 `BasicI2S` 测试固件约为 3.15 MiB，标准版约为 4.03 MiB，
+因此普通的 1～3 MB 应用分区无法容纳。三个示例都带有适用于 8 MB Flash 的
+`partitions.csv`：应用分区为 6.6875 MiB，SPIFFS 为 1.25 MiB。相同布局也保存于
+`extras/partitions/tts_8mb_embedded.csv`。
 
-```text
---fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB"
-```
+更换声音模型后只需重新编译并正常上传固件；选择“Erase All Flash”后也不需要
+额外恢复声音数据。
 
-若使用自定义分区表，分区名称必须与 `begin()` 参数相同，且声音数据文件必须能
-完整放入分区。改变偏移后，烧录脚本必须使用同一份 CSV：
+## 维护声音数据归档
+
+发布包中的 `src/esp32s3/libESP32TTSVoice.a` 由 `extras/voice_data` 中的两个官方
+`.dat` 生成。替换模型文件后，使用 ESP32-S3 GCC 工具链重新生成归档：
 
 ```bash
-python3 tools/flash_voice.py --port /dev/ttyUSB0 \
-  --partitions path/to/partitions.csv
+python3 tools/build_voice_archive.py --toolchain path/to/toolchain/bin
 ```
 
-## 依据与限制
+来源、校验值和许可见 `extras/voice_data/README.md`。
 
-实现遵循乐鑫 ESP-SR 最新 TTS 文档和 `esp-skainet/examples/chinese_tts` 的流程：
-映射声音分区、调用 `esp_tts_voice_set_init()` / `esp_tts_create()`，随后循环读取
-`esp_tts_stream_play()` 的 PCM 块。声音文件来自 ESP-SR 仓库中固定提交，来源与
-许可见 `extras/voice_data/README.md`。
+## 限制
 
-- [ESP-SR TTS 语音合成文档](https://docs.espressif.com/projects/esp-sr/zh_CN/latest/esp32s3/speech_synthesis/readme.html)
-- [ESP-Skainet chinese_tts 官方示例](https://github.com/espressif/esp-skainet/tree/master/examples/chinese_tts)
-- [Arduino-ESP32 自定义分区表文档](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/partition_table.html)
+- 当前设备端合成器只支持中文，文本源码应使用 UTF-8。
+- 输出固定为 16 kHz、16-bit、有符号、单声道 PCM。
+- 合成为流式阻塞操作；应用需要保持响应时请放到独立 FreeRTOS 任务。
+- 库只支持 ESP32-S3，并依赖 Arduino-ESP32 随附的 ESP-SR TTS 组件。

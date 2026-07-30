@@ -1,93 +1,54 @@
 # ESP32 TTS Arduino Library
 
-English | [简体中文](README.md)
+English | [简体中文](README_CN.md)
 
-An offline Chinese text-to-speech Arduino wrapper for the ESP32-S3. It uses
-the Espressif ESP-SR TTS engine bundled with Arduino-ESP32, accepts UTF-8
-Chinese text, and streams 16 kHz, signed 16-bit, mono PCM. The library can
-write directly to an Arduino `Stream` such as `I2SClass`, or to a custom PCM
-callback. It also supports pinyin input, payment announcements, speech speeds
-from 0 to 5, and cancellation from another task.
+An offline Chinese text-to-speech Arduino wrapper for ESP32-S3. It uses the
+ESP-SR TTS engine bundled with Arduino-ESP32 and streams 16 kHz, signed 16-bit,
+mono PCM to an Arduino `Stream` such as `I2SClass`, or to a custom callback.
+Pinyin input, payment announcements, speeds from 0 to 5, and cross-task
+cancellation are supported.
 
-> **Language note:** this is the English documentation for the library. The
-> current on-device ESP-SR speech synthesizer generates Chinese speech only.
+The voice model is compiled directly into the application firmware. A separate
+`voice_data` partition and `.dat` upload are no longer required. The 2.78 MiB
+small model is selected by default; a macro selects the 3.64 MiB standard
+model. Only the selected model is linked into the final firmware.
 
 ## Requirements
 
-- An ESP32-S3 with at least 8 MB of flash.
-- Arduino-ESP32 3.3.8 or a newer 3.x release. The library has been fully
-  compiled and linked against 3.3.8 and 3.3.11-cn.
-- An I2S DAC/amplifier such as the MAX98357A, or a custom audio output that
-  accepts PCM samples.
-- UTF-8 source files when passing Chinese text literals.
+- ESP32-S3 with at least 8 MB of flash.
+- Arduino-ESP32 3.3.8 or a newer 3.x release.
+- An I2S DAC/amplifier such as MAX98357A, or a custom PCM output.
+- The `BasicI2S_ES8311` example also requires the sibling `esp32_es8311`
+  library.
 
-The `BasicI2S_ES8311` example additionally uses the standalone
-`esp32_es8311` sibling library. That library controls the codec while TTS PCM
-continues to flow through Arduino `I2SClass`.
+## Setup
 
-Arduino-ESP32 3.3.x already provides `esp_tts_chinese`, `voice_set_xiaole`,
-and their headers, so this library does not duplicate those precompiled
-components. Following Espressif's recommended layout, the voice set is stored
-in a separate `voice_data` partition instead of consuming application space.
+1. Install this library, select an ESP32-S3 board, and set **Flash Size** to
+   8 MB or more.
+2. Open `File > Examples > ESP32TTS > BasicI2S` and adjust the BCLK, LRCLK, and
+   DOUT pins.
+3. Compile and upload normally. The example's `partitions.csv` reserves enough
+   application space for either embedded model. There is no separate voice
+   data flashing step.
 
-## First-time setup
+## Selecting the voice model
 
-1. Install this library in Arduino IDE, select an ESP32-S3 board, set
-   **Flash Size** to 8 MB or more, and select **Default 8MB** for
-   **Partition Scheme**.
-2. Open `File > Examples > ESP32TTS > BasicI2S`. Change the BCLK, LRCLK, and
-   DOUT pins to match your hardware. Arduino automatically uses the
-   `partitions.csv` included in the example directory.
-3. Upload the example once so the custom partition table is written.
-4. Flash the voice data once. Repeat this step only after erasing the entire
-   flash or changing the voice set.
+No configuration is needed for the default small model:
 
-   Windows PowerShell:
+```cpp
+#include <ESP32TTS.h>
+```
 
-   ```powershell
-   py -m pip install esptool
-   py tools/flash_voice.py --port COM5
-   ```
+To select the standard model, define the macro before including the header:
 
-   Linux/macOS:
+```cpp
+#define ESP32_TTS_USE_STANDARD_VOICE 1
+#include <ESP32TTS.h>
+```
 
-   ```bash
-   python3 -m pip install esptool
-   python3 tools/flash_voice.py --port /dev/ttyUSB0
-   ```
-
-   When the library is installed through Arduino IDE, `tools` is inside the
-   installed library directory. The default layout places the 3 MB
-   `voice_data` partition at `0x410000`. Before invoking esptool, the script
-   reads the partition CSV, checks that the model fits, and verifies the
-   SHA-256 of the bundled official voice file.
-
-   A custom voice file must include its expected digest so a damaged or
-   accidentally selected file cannot be flashed:
-
-   ```bash
-   python3 tools/flash_voice.py --port /dev/ttyUSB0 \
-     --model path/to/voice.dat --sha256 <64-character-SHA-256>
-   ```
-
-   The tool prints the matching `tts.begin()` validation arguments.
-
-   The default is the 2.78 MiB small model. To use the 3.64 MiB full Xiaoxin
-   model, copy `extras/partitions/tts_8mb_standard.csv` to the sketch as
-   `partitions.csv`, upload the sketch so that layout takes effect, then run:
-
-   ```powershell
-   py tools/flash_voice.py --port COM5 --voice standard
-   ```
-
-   Continue to initialize with `tts.begin()`; the library automatically
-   identifies the small or full Xiaoxin model by its length and SHA-256. The
-   full model's 8 MB layout allocates 3 MB to the application, 3.6875 MB to
-   voice data, and 1.25 MB to SPIFFS. It does not fit the default 3 MB
-   `voice_data` partition.
-
-Normal Arduino uploads do not overwrite `voice_data`. If **Erase All Flash**
-is enabled, flash the voice data again afterward.
+The build system may define `ESP32_TTS_USE_STANDARD_VOICE=1` instead. The macro
+accepts only `0` or `1`. The models are separate members of a static archive,
+so the linker extracts only the selected member.
 
 ## Minimal example
 
@@ -100,12 +61,10 @@ ESP32TTS tts;
 
 void setup() {
   Serial.begin(115200);
-
   i2s.setPins(5, 6, 7); // BCLK, LRCLK, DOUT
   if (!i2s.begin(I2S_MODE_STD, ESP32TTS::sampleRate,
                  I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO,
                  I2S_STD_SLOT_LEFT)) {
-    Serial.println("I2S initialization failed");
     return;
   }
 
@@ -115,93 +74,66 @@ void setup() {
   }
 
   tts.setSpeed(3);
-  if (!tts.speak("欢迎使用离线语音合成", i2s)) {
-    Serial.println(tts.lastErrorMessage());
-  }
+  tts.speak("欢迎使用离线语音合成", i2s);
 }
 
 void loop() {}
 ```
 
-`speak()` is blocking. To cancel it, call `stop()` from another FreeRTOS task.
-Cancellation takes effect between generated PCM blocks or after the current
-output callback returns, so callbacks must not block indefinitely. The
-destructor requests cancellation and waits for active synthesis to exit. Do
-not destroy an `ESP32TTS` object from inside its PCM callback.
+`speak()` is blocking. Call `stop()` from another FreeRTOS task to cancel it.
+Do not destroy an `ESP32TTS` object from inside its PCM callback.
 
 ## API overview
 
-- `begin("voice_data")`: identify either bundled voice model by its exact
-  length and SHA-256, map the partition, and create the synthesizer.
-- `begin(label, size, sha256)`: validate a custom voice file using its exact
-  length and SHA-256.
+- `begin()`: create the synthesizer from the embedded small or standard model.
 - `speak(text, stream/callback)`: synthesize UTF-8 Chinese text.
 - `speakPinyin("da4 jia1 hao3", ...)`: synthesize numbered-tone pinyin.
-- `speakMoney(yuan, jiao, fen, mode, ...)`: announce an amount, optionally
-  prefixed with Alipay or WeChat payment wording.
-- `setSpeed(0..5)`: set the speech speed; 0 is slowest, 5 is fastest, and 3 is
-  the default.
-- `stop()`: request cancellation of an active blocking synthesis operation.
-- `lastError()` / `lastErrorMessage()`: retrieve the most recent error.
-- `end()`: destroy the engine and voice set, then release the flash mapping;
-  it returns `false`/`Busy` while synthesis is active.
+- `speakMoney(yuan, jiao, fen, mode, ...)`: announce a payment amount.
+- `setSpeed(0..5)`: set speed; 0 is slowest, 5 fastest, and 3 the default.
+- `stop()`: request cancellation of active blocking synthesis.
+- `lastError()` / `lastErrorMessage()`: retrieve the latest error.
+- `end()`: release the engine and voice set; returns `false`/`Busy` while busy.
 
-The PCM callback has the following signature. Return the number of samples
-consumed. Returning 0 aborts synthesis with `OutputFailed`.
+For compatibility, `begin(partitionLabel)` and
+`begin(partitionLabel, size, sha256)` can still load external partition data.
+New applications normally only need the parameterless `begin()`.
+
+The PCM callback returns the number of consumed samples. Returning 0 aborts
+synthesis with `OutputFailed`:
 
 ```cpp
 size_t output(const int16_t *samples, size_t sampleCount, void *userData);
 ```
 
-The callback may consume only part of a block. The library calls it again with
-the unconsumed samples until the complete block has been handled.
+## Flash and partitions
 
-## Partition layout
+The tested `BasicI2S` firmware is about 3.15 MiB with the small model and
+4.03 MiB with the standard model, so common 1–3 MB application partitions are
+too small. Each example includes an 8 MB `partitions.csv` with a 6.6875 MiB
+application partition and 1.25 MiB SPIFFS. The same layout is available as
+`extras/partitions/tts_8mb_embedded.csv`.
 
-The example partition table targets devices with 8 MB or more of flash. It
-allocates 4 MB to the application, 3 MB to voice data, and 960 KB to SPIFFS.
-The CSV in the example controls the actual layout, but Arduino's application
-size check still comes from the board menu. With Arduino-ESP32 3.3.11-cn,
-select **Default 8MB**: changing only Flash Size leaves the default 1,310,720
-byte application limit, while the **Custom** menu entry exposes an unsafe
-16 MB limit. The equivalent Arduino CLI option is:
+Changing the model only requires rebuilding and uploading the firmware.
+Erasing all flash does not require a separate voice-data recovery step.
 
-```text
---fqbn "esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB"
-```
+## Rebuilding the voice archive
 
-If you use a custom table, its partition label must match the value passed to
-`begin()`, and the voice model must fit in the partition.
-
-When changing the partition offset, pass the same CSV to the flashing tool:
+`src/esp32s3/libESP32TTSVoice.a` is generated from the two official `.dat`
+files in `extras/voice_data`. After replacing either model, rebuild it with an
+ESP32-S3 GCC toolchain:
 
 ```bash
-python3 tools/flash_voice.py --port /dev/ttyUSB0 \
-  --partitions path/to/partitions.csv
+python3 tools/build_voice_archive.py --toolchain path/to/toolchain/bin
 ```
 
-You may override the detected offset explicitly with `--offset`, but using the
-same CSV as the sketch is safer.
+See `extras/voice_data/README.md` for sources, checksums, and licensing.
 
-## Design basis and limitations
+## Limitations
 
-The implementation follows the current ESP-SR TTS documentation and the
-`esp-skainet/examples/chinese_tts` workflow: map the voice partition, call
-`esp_tts_voice_set_init()` and `esp_tts_create()`, then repeatedly consume PCM
-blocks from `esp_tts_stream_play()`. The bundled voice file is pinned to a
-specific ESP-SR commit; see `extras/voice_data/README.md` for its source,
-checksum context, and license.
-
-- The synthesizer currently supports Chinese only.
-- Text must be encoded as UTF-8.
-- Output is always 16 kHz, signed 16-bit, mono PCM.
-- Synthesis is streaming and blocking; use a separate FreeRTOS task if the
+- The current on-device synthesizer supports Chinese only; sources must be
+  UTF-8.
+- Output is fixed at 16 kHz, signed 16-bit, mono PCM.
+- Synthesis is streaming and blocking; use a separate FreeRTOS task when the
   application must remain responsive.
-- Hardware audio playback has to be configured by the sketch or implemented
-  in the PCM callback.
-
-References:
-
-- [ESP-SR TTS documentation](https://docs.espressif.com/projects/esp-sr/en/latest/esp32s3/speech_synthesis/readme.html)
-- [Official ESP-Skainet chinese_tts example](https://github.com/espressif/esp-skainet/tree/master/examples/chinese_tts)
-- [Arduino-ESP32 custom partition documentation](https://docs.espressif.com/projects/arduino-esp32/en/latest/tutorials/partition_table.html)
+- The library supports ESP32-S3 and depends on ESP-SR TTS components bundled
+  with Arduino-ESP32.

@@ -109,6 +109,63 @@ ESP32TTS::~ESP32TTS() {
   releaseResources();
 }
 
+bool ESP32TTS::beginEmbedded(const uint8_t *voiceData, size_t voiceDataSize) {
+  if (voiceData == nullptr || voiceDataSize == 0) {
+    setError(ESP32TTSError::InvalidArgument);
+    return false;
+  }
+
+  bool expectedIdle = false;
+  if (!_busy.compare_exchange_strong(expectedIdle, true)) {
+    setError(ESP32TTSError::Busy);
+    return false;
+  }
+  _stopRequested.store(false);
+  releaseResources();
+
+#if !defined(ARDUINO_ARCH_ESP32) || !defined(CONFIG_IDF_TARGET_ESP32S3)
+  setError(ESP32TTSError::UnsupportedTarget);
+  finishOperation();
+  return false;
+#elif !ESP32_TTS_ENGINE_AVAILABLE
+  setError(ESP32TTSError::EngineUnavailable);
+  finishOperation();
+  return false;
+#else
+  Impl *impl = new (std::nothrow) Impl();
+  if (impl == nullptr) {
+    setError(ESP32TTSError::OutOfMemory);
+    finishOperation();
+    return false;
+  }
+
+  impl->voice = esp_tts_voice_set_init(
+      &esp_tts_voice_template,
+      const_cast<uint8_t *>(voiceData));
+  if (impl->voice == nullptr) {
+    delete impl;
+    setError(ESP32TTSError::VoiceInitFailed);
+    finishOperation();
+    return false;
+  }
+
+  impl->handle = esp_tts_create(impl->voice);
+  if (impl->handle == nullptr) {
+    esp_tts_voice_set_free(impl->voice);
+    delete impl;
+    setError(ESP32TTSError::EngineCreateFailed);
+    finishOperation();
+    return false;
+  }
+
+  _impl = impl;
+  _ready.store(true);
+  setError(ESP32TTSError::None);
+  finishOperation();
+  return true;
+#endif
+}
+
 bool ESP32TTS::begin(const char *partitionLabel) {
   if (begin(partitionLabel, smallVoiceDataSize, smallVoiceDataSha256)) {
     return true;

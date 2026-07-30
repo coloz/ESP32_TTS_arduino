@@ -1,0 +1,6 @@
+# 8 MB layout with room for either embedded voice model
+# Name,      Type, SubType, Offset,   Size,     Flags
+nvs,         data, nvs,     0x9000,   0x5000,
+otadata,     data, ota,     0xe000,   0x2000,
+factory,     app,  factory, 0x10000,  0x6B0000,
+spiffs,      data, spiffs,  0x6C0000, 0x140000,

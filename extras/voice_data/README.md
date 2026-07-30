@@ -19,3 +19,7 @@ Exact validation values used by the library and flashing tool:
   `cc9a81fd716b3c07fae3ca2f802dc026081896f2e34db9b9db117d4de5a85c01`
 - Xiaoxin full: `3821311` bytes, SHA-256
   `b0b9ad9fdaa4a560ee839ce6a4659f08af3fded7c72d0784d83186859a081e55`
+
+The Arduino library links one of these files directly into the application
+firmware through `src/esp32s3/libESP32TTSVoice.a`. Run
+`tools/build_voice_archive.py` after changing either `.dat` file.

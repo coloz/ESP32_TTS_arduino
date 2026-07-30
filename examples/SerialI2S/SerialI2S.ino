@@ -2,7 +2,8 @@
 #include <ESP_I2S.h>
 #include <ESP32TTS.h>
 
-// Board settings: Flash Size = 8MB, Partition Scheme = Default 8MB.
+// Board setting: Flash Size = 8MB. This example's partitions.csv reserves
+// enough application space for either embedded voice model.
 static constexpr int I2S_BCLK = 5;
 static constexpr int I2S_LRCLK = 6;
 static constexpr int I2S_DOUT = 7;

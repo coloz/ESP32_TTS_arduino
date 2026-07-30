@@ -4,6 +4,38 @@
 #include <atomic>
 #include <stdint.h>
 
+// Define this to 1 before including ESP32TTS.h to embed the standard Xiaoxin
+// model. The small model is embedded by default. The two models live in
+// separate archive members, so the linker only adds the selected one to the
+// firmware.
+#ifndef ESP32_TTS_USE_STANDARD_VOICE
+#define ESP32_TTS_USE_STANDARD_VOICE 0
+#endif
+
+#if ESP32_TTS_USE_STANDARD_VOICE != 0 && \
+    ESP32_TTS_USE_STANDARD_VOICE != 1
+#error "ESP32_TTS_USE_STANDARD_VOICE must be 0 or 1"
+#endif
+
+namespace esp32_tts_detail {
+
+extern "C" const uint8_t esp32_tts_voice_small_start[];
+extern "C" const uint8_t esp32_tts_voice_standard_start[];
+
+template <bool UseStandard> struct EmbeddedVoice;
+
+template <> struct EmbeddedVoice<false> {
+  static const uint8_t *data() { return esp32_tts_voice_small_start; }
+  static constexpr size_t size = 2913777;
+};
+
+template <> struct EmbeddedVoice<true> {
+  static const uint8_t *data() { return esp32_tts_voice_standard_start; }
+  static constexpr size_t size = 3821311;
+};
+
+} // namespace esp32_tts_detail
+
 enum class ESP32TTSError : uint8_t {
   None = 0,
   UnsupportedTarget,
@@ -49,8 +81,17 @@ public:
   ESP32TTS(const ESP32TTS &) = delete;
   ESP32TTS &operator=(const ESP32TTS &) = delete;
 
-  // Detects and verifies either bundled voice model, then creates a TTS instance.
-  bool begin(const char *partitionLabel = "voice_data");
+  // Initializes TTS from the voice model embedded in the application firmware.
+  // Define ESP32_TTS_USE_STANDARD_VOICE to 1 before including this header to
+  // select the standard model; otherwise the small model is linked by default.
+  template <bool UseStandard = (ESP32_TTS_USE_STANDARD_VOICE != 0)>
+  bool begin() {
+    return beginEmbedded(esp32_tts_detail::EmbeddedVoice<UseStandard>::data(),
+                         esp32_tts_detail::EmbeddedVoice<UseStandard>::size);
+  }
+
+  // Legacy partition APIs. New applications normally only need begin().
+  bool begin(const char *partitionLabel);
 
   // Custom voice data must be protected by its exact byte length and SHA-256.
   bool begin(const char *partitionLabel, size_t voiceDataSize,
@@ -85,6 +126,7 @@ public:
 private:
   struct Impl;
 
+  bool beginEmbedded(const uint8_t *voiceData, size_t voiceDataSize);
   bool speakText(const char *text, bool pinyin, AudioOutput output, void *userData);
   bool outputParsed(AudioOutput output, void *userData);
   bool beginOperation(AudioOutput output);
